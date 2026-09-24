@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Awaitable, Callable, Iterable, Union
+from typing import Awaitable, Callable, Iterable, Optional, Union
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -52,6 +52,7 @@ async def embed_and_store_document(
     vectorstore: Chroma,
     update_status: StatusUpdater,
     describe: Describer = page_visual_descriptions,
+    on_page: Optional[Callable[[int], None]] = None,
 ) -> None:
     """Embed every page not already in the store, then mark the doc done.
 
@@ -64,6 +65,8 @@ async def embed_and_store_document(
 
     for page in pages:
         if page.page_number in done:
+            if on_page:
+                on_page(page.page_number)
             continue
         visual = await describe(page)
         full_text = "\n\n".join(filter(None, [page.text, visual]))
@@ -85,6 +88,8 @@ async def embed_and_store_document(
             await vectorstore.aadd_documents(
                 chunks[i : i + EMBED_BATCH_SIZE], ids=ids[i : i + EMBED_BATCH_SIZE]
             )
+        if on_page:
+            on_page(page.page_number)
 
     result = update_status(doc_id, "done", 100)
     if inspect.isawaitable(result):
