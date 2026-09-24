@@ -2,3 +2,4 @@ fastapi
 pymupdf
 pymupdf4llm
 redis
+ollama
