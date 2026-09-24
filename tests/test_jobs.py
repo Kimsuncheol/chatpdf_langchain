@@ -2,7 +2,6 @@ import shutil
 
 import pymupdf
 import pytest
-from fastapi.testclient import TestClient
 from langchain_chroma import Chroma
 from langchain_core.embeddings import DeterministicFakeEmbedding
 
@@ -20,10 +19,7 @@ def eager(monkeypatch):
     return calls
 
 
-client = TestClient(main.app)
-
-
-def test_analyze_enqueues_and_returns_202(monkeypatch):
+def test_analyze_enqueues_and_returns_202(client, monkeypatch):
     seen = {}
 
     class T:
@@ -36,7 +32,7 @@ def test_analyze_enqueues_and_returns_202(monkeypatch):
     assert seen["a"] == ("abc123", "uploads/u1/abc123.pdf")
 
 
-def test_analyze_validates_and_handles_broker_down(monkeypatch):
+def test_analyze_validates_and_handles_broker_down(client, monkeypatch):
     assert client.post("/analyze", json={"docId": "", "storagePath": "x"}).status_code == 422
 
     def boom(*a):
@@ -46,7 +42,7 @@ def test_analyze_validates_and_handles_broker_down(monkeypatch):
     assert client.post("/analyze", json={"docId": "a", "storagePath": "b"}).status_code == 503
 
 
-def test_failure_sets_error_and_does_not_leak(monkeypatch, eager, caplog):
+def test_failure_sets_error_and_does_not_leak(client, monkeypatch, eager, caplog):
     def bad(*a, **k):
         raise ValueError("secret /internal/path")
 
@@ -59,7 +55,7 @@ def test_failure_sets_error_and_does_not_leak(monkeypatch, eager, caplog):
     assert body == {"state": "FAILURE", "error": "Processing failed"}
 
 
-def test_failure_shows_safe_pipeline_message(monkeypatch):
+def test_failure_shows_safe_pipeline_message(client, monkeypatch):
     def bad(*a, **k):
         raise PipelineError("PDF parsing failed: corrupted file")
 
@@ -69,7 +65,7 @@ def test_failure_shows_safe_pipeline_message(monkeypatch):
         "state": "FAILURE", "error": "PDF parsing failed: corrupted file"}
 
 
-def test_status_started_and_pending(monkeypatch):
+def test_status_started_and_pending(client, monkeypatch):
     class R:
         state, info = "STARTED", {"progressPercent": 42}
 
@@ -79,7 +75,7 @@ def test_status_started_and_pending(monkeypatch):
     assert client.get("/jobs/x/status").json() == {"state": "PENDING"}
 
 
-def test_full_pipeline_progress_and_done(monkeypatch, eager, tmp_path):
+def test_full_pipeline_progress_and_done(client, monkeypatch, eager, tmp_path):
     src = tmp_path / "src.pdf"
     doc = pymupdf.open()
     for i in range(4):

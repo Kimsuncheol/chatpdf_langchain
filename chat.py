@@ -8,7 +8,7 @@ import re
 from functools import lru_cache
 from typing import AsyncIterator, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -16,7 +16,7 @@ from langchain_ollama import ChatOllama
 from pydantic import BaseModel, Field
 
 from ingest import make_vectorstore
-from rate_limit import rate_limiter
+from ratelimit import CHAT_LIMIT, limiter
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,6 @@ MAX_HISTORY_MESSAGES = 6
 HISTORY_TOKEN_BUDGET = 3000
 CHARS_PER_TOKEN = 2  # conservative (Korean text tokenizes densely)
 NO_ANSWER = "I couldn't find relevant content in this document for that question."
-CHAT_RATE_LIMIT = (30, 60)  # requests per window seconds, per client; separate bucket from /analyze
 
 SYSTEM_PROMPT = (
     "You answer questions about a single document using only the excerpts provided. "
@@ -158,8 +157,9 @@ async def _stream(req: ChatRequest, vectorstore, llm) -> AsyncIterator[str]:
     yield sse("done", {"citedPages": cited_pages("".join(answer), docs)})
 
 
-@router.post("/chat", dependencies=[Depends(rate_limiter("chat", *CHAT_RATE_LIMIT))])
-async def chat(req: ChatRequest, vectorstore=Depends(get_vectorstore), llm=Depends(get_llm)):
+@router.post("/chat")
+@limiter.limit(CHAT_LIMIT)  # per uid; needs `request` in the signature
+async def chat(request: Request, req: ChatRequest, vectorstore=Depends(get_vectorstore), llm=Depends(get_llm)):
     return StreamingResponse(
         _stream(req, vectorstore, llm),
         media_type="text/event-stream",

@@ -1,18 +1,39 @@
 import logging
+from contextlib import asynccontextmanager
 
 from celery.result import AsyncResult
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from slowapi.errors import RateLimitExceeded
 
+import firebase_io
 from celery_app import celery_app
 from chat import router as chat_router
+from ratelimit import ANALYZE_LIMIT, limiter, rate_limit_handler
+from security import get_current_user
 from tasks import process_document_task
 
 logger = logging.getLogger(__name__)
-app = FastAPI()
-app.include_router(chat_router)
 
-@app.get("/")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    firebase_io.init_firebase()  # once at startup, not per request
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+app.include_router(chat_router, dependencies=[Depends(get_current_user)])
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}  # the only unauthenticated route (besides FastAPI's /docs)
+
+
+@app.get("/", dependencies=[Depends(get_current_user)])
 def read_root():
     return {"message": "Hello, FastAPI!"}
 
@@ -22,8 +43,9 @@ class AnalyzeRequest(BaseModel):
     storagePath: str = Field(min_length=1)
 
 
-@app.post("/analyze", status_code=202)
-def analyze(req: AnalyzeRequest):
+@app.post("/analyze", status_code=202, dependencies=[Depends(get_current_user)])
+@limiter.limit(ANALYZE_LIMIT)  # per uid
+def analyze(request: Request, req: AnalyzeRequest):
     # Never parse here: always hand off to the worker.
     try:
         task = process_document_task.delay(req.docId, req.storagePath)
@@ -33,7 +55,7 @@ def analyze(req: AnalyzeRequest):
     return {"jobId": task.id, "status": "queued"}
 
 
-@app.get("/jobs/{job_id}/status")
+@app.get("/jobs/{job_id}/status", dependencies=[Depends(get_current_user)])
 def job_status(job_id: str):
     result = AsyncResult(job_id, app=celery_app)
     state = result.state

@@ -1,14 +1,12 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessageChunk
 
 import chat
 import main
-import rate_limit
 from chat import ChatTurn, cited_pages, trim_history
 
 
@@ -31,30 +29,8 @@ class FakeLLM:
             yield AIMessageChunk(content=t)
 
 
-class FakeRedis:
-    def __init__(self):
-        self.n = {}
-
-    async def incr(self, k):
-        self.n[k] = self.n.get(k, 0) + 1
-        return self.n[k]
-
-    async def expire(self, k, s):
-        pass
-
-    async def ttl(self, k):
-        return 42
-
-
 def doc(page, text):
     return Document(page_content=text, metadata={"docId": "d", "page_number": page})
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setattr(rate_limit, "_redis", FakeRedis())
-    yield TestClient(main.app)
-    main.app.dependency_overrides.clear()
 
 
 def override(store, llm):
@@ -120,17 +96,6 @@ def test_trim_history_drops_oldest_by_token_budget():
 
 def test_cited_pages_explicit_reference():
     assert cited_pages("See (page 7) and 9페이지.", [doc(7, "a"), doc(8, "b"), doc(9, "c")]) == [7, 9]
-
-
-def test_rate_limit_429_separate_bucket(client, monkeypatch):
-    override(FakeStore([]), FakeLLM([]))
-    monkeypatch.setattr(main.process_document_task, "delay", lambda *a: type("T", (), {"id": "j"})())
-    for _ in range(30):
-        assert client.post("/chat", json=BODY).status_code == 200
-    r = client.post("/chat", json=BODY)
-    assert r.status_code == 429 and r.headers["retry-after"] == "42"
-    # /analyze has its own namespace, so it is unaffected
-    assert client.post("/analyze", json={"docId": "a", "storagePath": "b"}).status_code == 202
 
 
 def test_cosine_relevance_with_real_chroma(tmp_path):

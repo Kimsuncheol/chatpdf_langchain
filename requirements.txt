@@ -8,3 +8,4 @@ langchain-ollama
 langchain-text-splitters
 celery
 firebase-admin
+slowapi

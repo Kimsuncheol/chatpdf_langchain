@@ -14,12 +14,18 @@ logger = logging.getLogger(__name__)
 COLLECTION = os.environ.get("FIRESTORE_DOCS_COLLECTION", "documents")
 
 
-def _db():
+def init_firebase() -> None:
+    """Initialise the Admin SDK once per process (called at app/worker startup); idempotent."""
     import firebase_admin
-    from firebase_admin import firestore
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app()
+
+
+def _db():
+    from firebase_admin import firestore
+
+    init_firebase()  # no-op after startup; keeps Celery workers self-sufficient
     return firestore.client()
 
 
