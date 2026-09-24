@@ -30,6 +30,9 @@ def make_vectorstore(persist_directory: str, collection_name: str = "chatpdf") -
         collection_name=collection_name,
         embedding_function=OllamaEmbeddings(model=EMBEDDING_MODEL),
         persist_directory=persist_directory,
+        # Cosine so relevance = 1 - distance is meaningful for the /chat threshold.
+        # Fixed at collection creation: rebuild any collection created before this.
+        collection_configuration={"hnsw": {"space": "cosine"}},
     )
 
 

@@ -10,15 +10,11 @@ import firebase_io
 import main
 import pipeline
 import tasks
-from celery_app import celery_app
 from pipeline import PipelineError
 
 
 @pytest.fixture(autouse=True)
 def eager(monkeypatch):
-    celery_app.conf.update(
-        task_always_eager=True, task_store_eager_result=True, result_backend="cache+memory://"
-    )
     calls = []
     monkeypatch.setattr(firebase_io, "update_status", lambda *a, **k: calls.append((a, k)))
     return calls

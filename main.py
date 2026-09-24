@@ -5,10 +5,12 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from celery_app import celery_app
+from chat import router as chat_router
 from tasks import process_document_task
 
 logger = logging.getLogger(__name__)
 app = FastAPI()
+app.include_router(chat_router)
 
 @app.get("/")
 def read_root():
