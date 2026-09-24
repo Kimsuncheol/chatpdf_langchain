@@ -75,9 +75,14 @@ async def describe_page_visuals(image_path: str, page_text: str) -> str:
         return ""
 
 
-async def enrich_page(page: PageContent) -> str:
-    """Page text merged with visual descriptions; skips the model when has_images is False."""
+async def page_visual_descriptions(page: PageContent) -> str:
+    """Qwen-VL descriptions for a page's images ("" if none); never calls the model when has_images is False."""
     if not page.has_images:
-        return page.text
+        return ""
     descriptions = [d for p in page.image_paths if (d := await describe_page_visuals(p, page.text))]
-    return "\n\n".join([page.text, *descriptions])
+    return "\n\n".join(descriptions)
+
+
+async def enrich_page(page: PageContent) -> str:
+    """Page text merged with visual descriptions."""
+    return "\n\n".join(filter(None, [page.text, await page_visual_descriptions(page)]))

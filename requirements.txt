@@ -3,3 +3,6 @@ pymupdf
 pymupdf4llm
 redis
 ollama
+langchain-chroma
+langchain-ollama
+langchain-text-splitters
