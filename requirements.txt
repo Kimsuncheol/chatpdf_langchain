@@ -1,4 +1,5 @@
 fastapi
+uvicorn[standard]
 pymupdf
 pymupdf4llm
 redis
