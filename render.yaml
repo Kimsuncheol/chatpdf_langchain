@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: chatpdf-api
+    runtime: docker
+    plan: starter # persistent disks require a paid plan
+    healthCheckPath: /docs
+    disk:
+      name: chroma
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: CHROMA_DIR
+        value: /data/chroma_db
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: chatpdf-redis
+          property: connectionString
+      - key: OLLAMA_HOST
+        sync: false # e.g. https://your-ollama-host:11434
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
+      - key: CHAT_MODEL
+        value: qwen2.5:14b
+      - key: VISION_MODEL
+        value: qwen2.5vl:7b
+
+  - type: keyvalue
+    name: chatpdf-redis
+    plan: free
+    ipAllowList: [] # internal connections only
